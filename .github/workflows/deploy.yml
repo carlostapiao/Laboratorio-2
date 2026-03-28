@@ -24,7 +24,11 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # 🏗️ Crear infraestructura
+      # 🧱 INSTALAR TERRAFORM (FIX PRINCIPAL)
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # 🏗️ Infraestructura
       - name: Terraform Init
         working-directory: terraform
         run: terraform init
@@ -33,11 +37,11 @@ jobs:
         working-directory: terraform
         run: terraform apply -auto-approve
 
-      # ⏳ Esperar ACR (MUY IMPORTANTE)
+      # ⏳ Esperar ACR
       - name: Wait for ACR
         run: |
-          echo "Esperando que ACR esté listo..."
-          for i in {1..10}; do
+          echo "Esperando ACR..."
+          for i in {1..12}; do
             az acr show --name $ACR_NAME && break
             sleep 10
           done
@@ -55,11 +59,12 @@ jobs:
       # ⏳ Esperar AKS
       - name: Wait for AKS
         run: |
-          echo "Esperando que AKS esté listo..."
-          az aks wait --created \
-            --name $AKS_NAME \
+          echo "Esperando AKS..."
+          az aks wait \
             --resource-group $RESOURCE_GROUP \
-            --timeout 600
+            --name $AKS_NAME \
+            --created \
+            --timeout 900
 
       # 🔗 Conectarse a AKS
       - name: Get AKS credentials
