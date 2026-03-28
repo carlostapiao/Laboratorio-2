@@ -1,4 +1,4 @@
-name: Deploy AKS App
+name: Full Deploy AKS App
 
 on:
   push:
@@ -18,23 +18,58 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      # 🔐 Login Azure
       - name: Login Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # 🏗️ Crear infraestructura
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        run: terraform apply -auto-approve
+
+      # ⏳ Esperar ACR (MUY IMPORTANTE)
+      - name: Wait for ACR
+        run: |
+          echo "Esperando que ACR esté listo..."
+          for i in {1..10}; do
+            az acr show --name $ACR_NAME && break
+            sleep 10
+          done
+
+      # 🔑 Login ACR
       - name: Login ACR
         run: az acr login --name $ACR_NAME
 
+      # 🐳 Build & Push
       - name: Build and Push Image
         run: |
           docker build -t $ACR_NAME.azurecr.io/$IMAGE_NAME:v1 ./app
           docker push $ACR_NAME.azurecr.io/$IMAGE_NAME:v1
 
+      # ⏳ Esperar AKS
+      - name: Wait for AKS
+        run: |
+          echo "Esperando que AKS esté listo..."
+          az aks wait --created \
+            --name $AKS_NAME \
+            --resource-group $RESOURCE_GROUP \
+            --timeout 600
+
+      # 🔗 Conectarse a AKS
       - name: Get AKS credentials
         run: |
-          az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_NAME --overwrite-existing
+          az aks get-credentials \
+            --resource-group $RESOURCE_GROUP \
+            --name $AKS_NAME \
+            --overwrite-existing
 
+      # 🚀 Deploy
       - name: Deploy to AKS
         run: |
           kubectl apply -f k8s/deployment.yaml
